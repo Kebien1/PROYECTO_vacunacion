@@ -1,0 +1,67 @@
+using Microsoft.AspNetCore.Mvc;
+using Backend.Data;
+using Backend.Models;
+
+namespace Backend.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    public class PoblacionObjetivoController : ControllerBase
+    {
+        private readonly Conexion _context;
+
+        public PoblacionObjetivoController(Conexion context)
+        {
+            _context = context;
+        }
+
+        [HttpGet]
+        public IActionResult GetPoblaciones()
+        {
+            var poblaciones = _context.poblacionobjetivo.ToList();
+            return Ok(poblaciones);
+        }
+
+        [HttpGet("{id}")]
+        public IActionResult GetPoblacion(int id)
+        {
+            var poblacion = _context.poblacionobjetivo.Find(id);
+            if (poblacion == null) return NotFound();
+            return Ok(poblacion);
+        }
+
+        [HttpPost]
+        public IActionResult CreatePoblacion([FromBody] PoblacionObjetivo poblacion)
+        {
+            _context.poblacionobjetivo.Add(poblacion);
+            _context.SaveChanges();
+            return CreatedAtAction(nameof(GetPoblacion), new { id = poblacion.IdPoblacion }, poblacion);
+        }
+
+        [HttpPut("{id}")]
+        public IActionResult UpdatePoblacion(int id, [FromBody] PoblacionObjetivo poblacion)
+        {
+            var existing = _context.poblacionobjetivo.Find(id);
+            if (existing == null) return NotFound();
+
+            existing.Descripcion = poblacion.Descripcion;
+            existing.EdadMin = poblacion.EdadMin;
+            existing.EdadMax = poblacion.EdadMax;
+            existing.IdCampaña = poblacion.IdCampaña;
+
+            _context.SaveChanges();
+            return NoContent();
+        }
+
+        [HttpDelete("{id}")]
+        public IActionResult DeletePoblacion(int id)
+        {
+            var poblacion = _context.poblacionobjetivo.Find(id);
+            if (poblacion == null) return NotFound();
+
+            _context.poblacionobjetivo.Remove(poblacion);
+            _context.SaveChanges();
+            return NoContent();
+        }
+    }
+}
