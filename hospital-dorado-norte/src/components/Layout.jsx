@@ -120,6 +120,11 @@ export default function Layout() {
   const loc = useLocation()
   const titulo = todosLosItems.find((m) => m.to === loc.pathname)?.label || 'Dorado Norte'
 
+  const rol = (sesion?.rol || '').toLowerCase()
+  const isAdmin = rol.includes('administrador')
+  const isEncargado = rol.includes('encargado')
+  const isVacunador = rol.includes('responsable') || rol.includes('personal') || rol.includes('brigada')
+
   return (
     <div className="layout">
       <aside className="sidebar">
@@ -145,32 +150,43 @@ export default function Layout() {
           <div className="nav-separator" />
           <div className="nav-section-header">GESTIÓN</div>
           <div className="nav-section">
-            {menuGestion.map((m) => (
-              <NavLink key={m.to} to={m.to} className="nav-item">
-                <span className="ico">{m.icon}</span> {m.label}
-              </NavLink>
-            ))}
+            {menuGestion.map((m) => {
+              if (m.label === 'Campañas' && !isAdmin && !isEncargado) return null
+              return (
+                <NavLink key={m.to} to={m.to} className="nav-item">
+                  <span className="ico">{m.icon}</span> {m.label}
+                </NavLink>
+              )
+            })}
           </div>
 
-          <div className="nav-separator" />
-          <div className="nav-section-header">ANÁLISIS</div>
-          <div className="nav-section">
-            {menuAnalisis.map((m) => (
-              <NavLink key={m.to} to={m.to} className="nav-item">
-                <span className="ico">{m.icon}</span> {m.label}
-              </NavLink>
-            ))}
-          </div>
+          {(isAdmin || isEncargado) && (
+            <>
+              <div className="nav-separator" />
+              <div className="nav-section-header">ANÁLISIS</div>
+              <div className="nav-section">
+                {menuAnalisis.map((m) => (
+                  <NavLink key={m.to} to={m.to} className="nav-item">
+                    <span className="ico">{m.icon}</span> {m.label}
+                  </NavLink>
+                ))}
+              </div>
+            </>
+          )}
 
-          <div className="nav-separator" />
-          <div className="nav-section-header">SISTEMA</div>
-          <div className="nav-section">
-            {menuSistema.map((m) => (
-              <NavLink key={m.to} to={m.to} className="nav-item">
-                <span className="ico">{m.icon}</span> {m.label}
-              </NavLink>
-            ))}
-          </div>
+          {isAdmin && (
+            <>
+              <div className="nav-separator" />
+              <div className="nav-section-header">SISTEMA</div>
+              <div className="nav-section">
+                {menuSistema.map((m) => (
+                  <NavLink key={m.to} to={m.to} className="nav-item">
+                    <span className="ico">{m.icon}</span> {m.label}
+                  </NavLink>
+                ))}
+              </div>
+            </>
+          )}
         </nav>
       </aside>
 

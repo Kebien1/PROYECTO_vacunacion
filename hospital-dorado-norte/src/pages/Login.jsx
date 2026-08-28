@@ -7,21 +7,26 @@ export default function Login() {
   const navigate = useNavigate()
   const [usuario, setUsuario] = useState('')
   const [password, setPassword] = useState('')
-  const [recuerdame, setRecuerdame] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault()
     setLoading(true)
     setError('')
-    const res = login(usuario.trim(), password)
+    const res = await login(usuario.trim(), password)
     if (!res.ok) {
       setError(res.error)
       setLoading(false)
       return
     }
     navigate('/')
+  }
+
+  function rellenarFormulario(user, pass) {
+    setUsuario(user)
+    setPassword(pass)
+    setError('')
   }
 
   return (
@@ -76,18 +81,7 @@ export default function Login() {
             </div>
           </div>
 
-          <div className="login-options">
-            <label className="remember-me">
-              <input
-                type="checkbox"
-                checked={recuerdame}
-                onChange={(e) => setRecuerdame(e.target.checked)}
-              />
-              <span>Recuérdame</span>
-            </label>
-            <a href="#olvide" onClick={(e) => e.preventDefault()} className="forgot-password">
-              Olvidé mi contraseña
-            </a>
+          <div className="login-options" style={{ marginBottom: 15 }}>
           </div>
 
           {error && <div className="login-error">{error}</div>}
@@ -105,33 +99,37 @@ export default function Login() {
           </button>
 
           <div className="login-divider" />
-
-          <div className="login-footer">
-            <div className="footer-label">¿No tienes cuenta?</div>
-            <div className="footer-links">
-              <a href="#registro" onClick={(e) => e.preventDefault()} className="footer-link">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                  <circle cx="9" cy="7" r="4" />
-                  <line x1="19" y1="8" x2="19" y2="14" />
-                  <line x1="22" y1="11" x2="16" y2="11" />
-                </svg>
-                Registrarse
-              </a>
-              <span className="dot">•</span>
-              <a href="#ayuda" onClick={(e) => e.preventDefault()} className="footer-link">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="10" />
-                  <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-                  <line x1="12" y1="17" x2="12.01" y2="17" />
-                </svg>
-                Ayuda
-              </a>
-            </div>
-            <div className="login-demo-credentials">
-              Acceso demo: <b>admin</b> / <b>admin123</b>
+          
+          <div style={{ textAlign: 'center', marginTop: 10 }}>
+            <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 10 }}>Acceso Rápido (Roles de Prueba):</p>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button 
+                type="button" 
+                className="pill pill-act" 
+                style={{ cursor: 'pointer', border: 'none' }}
+                onClick={() => rellenarFormulario('admin.sistema', 'admin123')}
+              >
+                Administrador
+              </button>
+              <button 
+                type="button" 
+                className="pill pill-act" 
+                style={{ cursor: 'pointer', border: 'none', background: '#0ea5e9', color: '#fff' }}
+                onClick={() => rellenarFormulario('encargado', 'encargado123')}
+              >
+                Encargado
+              </button>
+              <button 
+                type="button" 
+                className="pill pill-warning" 
+                style={{ cursor: 'pointer', border: 'none' }}
+                onClick={() => rellenarFormulario('vacunador', 'vacunador123')}
+              >
+                Vacunador
+              </button>
             </div>
           </div>
+
         </form>
       </div>
     </div>

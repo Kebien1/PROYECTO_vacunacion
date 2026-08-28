@@ -1,11 +1,5 @@
 import { createContext, useContext, useState } from 'react'
 
-const USUARIOS = [
-  { usuario: 'admin', password: 'admin123', rol: 'Administrador', nombre: 'Kevin Nuñez' },
-  { usuario: 'vacunador', password: 'vac123', rol: 'Personal de Vacunación', nombre: 'Ricardo Flores' },
-  { usuario: 'responsable', password: 'resp123', rol: 'Responsable de Vacunación', nombre: 'Andres Garcia' }
-]
-
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
@@ -14,13 +8,27 @@ export function AuthProvider({ children }) {
     return saved ? JSON.parse(saved) : null
   })
 
-  function login(usuario, password) {
-    const found = USUARIOS.find((u) => u.usuario === usuario && u.password === password)
-    if (!found) return { ok: false, error: 'Credenciales incorrectas' }
-    const user = { usuario: found.usuario, rol: found.rol, nombre: found.nombre }
-    localStorage.setItem('dn_sesion', JSON.stringify(user))
-    setSesion(user)
-    return { ok: true }
+  async function login(usuario, password) {
+    try {
+      const res = await fetch('http://localhost:5119/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ Usuario: usuario, Password: password })
+      })
+      
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        return { ok: false, error: errorData.mensaje || 'Error al iniciar sesión' }
+      }
+
+      const user = await res.json()
+      localStorage.setItem('dn_sesion', JSON.stringify(user))
+      setSesion(user)
+      return { ok: true }
+    } catch (error) {
+      console.error("Login error", error)
+      return { ok: false, error: 'No se pudo conectar con el servidor' }
+    }
   }
 
   function logout() {

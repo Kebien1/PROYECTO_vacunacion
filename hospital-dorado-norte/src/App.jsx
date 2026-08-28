@@ -12,9 +12,25 @@ import Reportes from './pages/Reportes.jsx'
 import Jornadas from './pages/Jornadas.jsx'
 import Usuarios from './pages/Usuarios.jsx'
 
-function RequireAuth({ children }) {
+function RequireAuth({ children, allowedRoles }) {
   const { sesion } = useAuth()
-  return sesion ? children : <Navigate to="/login" replace />
+  if (!sesion) return <Navigate to="/login" replace />
+
+  if (allowedRoles) {
+    const rol = (sesion.rol || '').toLowerCase()
+    const isAdmin = rol.includes('administrador')
+    const isEncargado = rol.includes('encargado')
+    const isVacunador = rol.includes('responsable') || rol.includes('personal') || rol.includes('brigada')
+
+    let hasAccess = false
+    if (allowedRoles.includes('admin') && isAdmin) hasAccess = true
+    if (allowedRoles.includes('encargado') && isEncargado) hasAccess = true
+    if (allowedRoles.includes('vacunador') && isVacunador) hasAccess = true
+
+    if (!hasAccess && !isAdmin) return <Navigate to="/" replace />
+  }
+
+  return children
 }
 
 export default function App() {
@@ -24,14 +40,20 @@ export default function App() {
       <Route path="/login" element={sesion ? <Navigate to="/" replace /> : <Login />} />
       <Route element={<RequireAuth><Layout /></RequireAuth>}>
         <Route path="/" element={<Dashboard />} />
-        <Route path="/campanas" element={<Campanas />} />
-        <Route path="/vacunaciones" element={<Vacunaciones />} />
-        <Route path="/stock" element={<VacunasStock />} />
-        <Route path="/alertas" element={<Alertas />} />
-        <Route path="/cobertura" element={<Cobertura />} />
-        <Route path="/reportes" element={<Reportes />} />
-        <Route path="/jornadas" element={<Jornadas />} />
-        <Route path="/usuarios" element={<Usuarios />} />
+        
+        {/* Gestión */}
+        <Route path="/campanas" element={<RequireAuth allowedRoles={['admin', 'encargado']}><Campanas /></RequireAuth>} />
+        <Route path="/vacunaciones" element={<RequireAuth allowedRoles={['admin', 'encargado', 'vacunador']}><Vacunaciones /></RequireAuth>} />
+        <Route path="/stock" element={<RequireAuth allowedRoles={['admin', 'encargado', 'vacunador']}><VacunasStock /></RequireAuth>} />
+        <Route path="/jornadas" element={<RequireAuth allowedRoles={['admin', 'encargado', 'vacunador']}><Jornadas /></RequireAuth>} />
+        
+        {/* Análisis */}
+        <Route path="/alertas" element={<RequireAuth allowedRoles={['admin', 'encargado']}><Alertas /></RequireAuth>} />
+        <Route path="/cobertura" element={<RequireAuth allowedRoles={['admin', 'encargado']}><Cobertura /></RequireAuth>} />
+        <Route path="/reportes" element={<RequireAuth allowedRoles={['admin', 'encargado']}><Reportes /></RequireAuth>} />
+        
+        {/* Sistema */}
+        <Route path="/usuarios" element={<RequireAuth allowedRoles={['admin']}><Usuarios /></RequireAuth>} />
       </Route>
       <Route path="*" element={<Navigate to={sesion ? '/' : '/login'} replace />} />
     </Routes>

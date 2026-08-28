@@ -1,8 +1,41 @@
-import { useMemo } from 'react'
-import { calcularAlertas } from '../data/mock.js'
+import { useState, useEffect } from 'react'
 
 export default function Alertas() {
-  const alertas = useMemo(() => calcularAlertas(), [])
+  const [alertas, setAlertas] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function fetchAlertas() {
+      try {
+        const res = await fetch('http://localhost:5119/api/lotes')
+        const data = await res.json()
+        
+        const alertasCalculadas = data.filter(l => 
+          l.cantidadDisponible < 100 || (new Date(l.fechaVencimiento) - new Date()) / (1000 * 60 * 60 * 24) < 30
+        ).map(l => {
+          const dias = Math.round((new Date(l.fechaVencimiento) - new Date()) / (1000 * 60 * 60 * 24))
+          return {
+            codigo: `LOTE-${l.idLote}`,
+            vacuna: l.vacuna?.nombre || 'Desconocida',
+            tipo: l.cantidadDisponible < 100 ? 'Stock Bajo' : 'Próximo a Vencer',
+            cantidad: l.cantidadDisponible,
+            minimo: 100, // Hardcoded ya que DB no soporta minimo
+            vencimiento: new Date(l.fechaVencimiento).toLocaleDateString(),
+            dias: dias
+          }
+        })
+        
+        setAlertas(alertasCalculadas)
+      } catch (e) {
+        console.error(e)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchAlertas()
+  }, [])
+
+  if (loading) return <div style={{ padding: 20 }}>Cargando alertas...</div>
 
   return (
     <div className="card">

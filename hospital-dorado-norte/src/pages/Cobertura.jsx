@@ -1,15 +1,31 @@
-import { poblacionObjetivo, vacunaciones } from '../data/mock.js'
+import { useState, useEffect } from 'react'
 
 export default function Cobertura() {
-  const metaTotal = poblacionObjetivo.reduce((s, p) => s + p.objetivo, 0)
-  const vacunados = vacunaciones.length * 400
+  const [vacunados, setVacunados] = useState(0)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch('http://localhost:5119/api/vacunaciones')
+      .then(res => res.json())
+      .then(data => {
+        setVacunados(data.length)
+        setLoading(false)
+      })
+      .catch(e => {
+        console.error(e)
+        setLoading(false)
+      })
+  }, [])
+
+  if (loading) return <div style={{ padding: 20 }}>Cargando datos de cobertura...</div>
+
+  const metaTotal = 5000 // Meta global por defecto (DB no almacena metas)
   const cobertura = Math.min(100, Math.round((vacunados / metaTotal) * 100))
   const pendiente = Math.max(0, metaTotal - vacunados)
 
-  const filas = poblacionObjetivo.map((p) => {
-    const vac = Math.min(p.objetivo, Math.round((vacunados * p.objetivo) / metaTotal))
-    return { ...p, vac, pct: Math.round((vac / p.objetivo) * 100), pend: p.objetivo - vac }
-  })
+  const filas = [
+    { grupo: 'General', objetivo: metaTotal, vac: vacunados, pct: cobertura, pend: pendiente }
+  ]
 
   return (
     <>

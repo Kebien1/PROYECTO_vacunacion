@@ -1,14 +1,53 @@
-import { useState } from 'react'
-import { jornadas } from '../data/mock.js'
+import { useState, useEffect } from 'react'
 
 export default function Jornadas() {
-  const [lista, setLista] = useState([...jornadas])
-  const [form, setForm] = useState({ fecha: '2026-04-05', horario: '08:00 – 16:00', punto: '', responsable: '' })
+  const [lista, setLista] = useState([])
+  const [campañas, setCampañas] = useState([])
+  const [form, setForm] = useState({ fecha: '', idCampaña: '' })
 
-  function agregar() {
-    if (!form.punto) return
-    setLista([...lista, { id: Date.now(), ...form }])
-    setForm({ fecha: '2026-04-05', horario: '08:00 – 16:00', punto: '', responsable: '' })
+  useEffect(() => {
+    cargarDatos()
+  }, [])
+
+  const cargarDatos = async () => {
+    try {
+      const resJor = await fetch('http://localhost:5119/api/jornadas')
+      setLista(await resJor.json())
+      
+      const resCam = await fetch('http://localhost:5119/api/campañas')
+      const dataCam = await resCam.json()
+      setCampañas(dataCam)
+
+      if (dataCam.length > 0) {
+        setForm({ fecha: new Date().toISOString().split('T')[0], idCampaña: dataCam[0].idCampaña })
+      }
+    } catch (error) {
+      console.error("Error cargando jornadas", error)
+    }
+  }
+
+  const agregar = async () => {
+    if (!form.fecha || !form.idCampaña) return
+    
+    try {
+      const res = await fetch('http://localhost:5119/api/jornadas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fecha: form.fecha,
+          idCampaña: parseInt(form.idCampaña)
+        })
+      })
+
+      if (res.ok) {
+        cargarDatos()
+      } else {
+        const errorData = await res.json()
+        alert(errorData.mensaje || 'Error al agregar jornada')
+      }
+    } catch (error) {
+      console.error("Error", error)
+    }
   }
 
   return (
@@ -17,9 +56,9 @@ export default function Jornadas() {
         <h2>Registrar jornada (RF06)</h2>
         <div className="row">
           <input className="input" type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} />
-          <input className="input" value={form.horario} onChange={(e) => setForm({ ...form, horario: e.target.value })} placeholder="Horario" />
-          <input className="input" value={form.punto} onChange={(e) => setForm({ ...form, punto: e.target.value })} placeholder="Punto de vacunación" />
-          <input className="input" value={form.responsable} onChange={(e) => setForm({ ...form, responsable: e.target.value })} placeholder="Responsable / brigada" />
+          <select className="input" value={form.idCampaña} onChange={(e) => setForm({ ...form, idCampaña: e.target.value })}>
+            {campañas.map((c) => (<option key={c.idCampaña} value={c.idCampaña}>{c.nombre}</option>))}
+          </select>
         </div>
         <button className="btn" onClick={agregar}>Agregar jornada</button>
       </div>
@@ -27,11 +66,13 @@ export default function Jornadas() {
       <div className="card">
         <h2>Jornadas programadas</h2>
         <table>
-          <thead><tr><th>Fecha</th><th>Horario</th><th>Punto</th><th>Responsable</th></tr></thead>
+          <thead><tr><th>ID</th><th>Fecha</th><th>Campaña</th></tr></thead>
           <tbody>
             {lista.map((j) => (
-              <tr key={j.id}>
-                <td>{j.fecha}</td><td>{j.horario}</td><td>{j.punto}</td><td>{j.responsable}</td>
+              <tr key={j.idJornada}>
+                <td>{j.idJornada}</td>
+                <td>{new Date(j.fecha).toLocaleDateString()}</td>
+                <td>{j.campaña?.nombre}</td>
               </tr>
             ))}
           </tbody>

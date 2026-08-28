@@ -1,5 +1,4 @@
-import React, { useState } from 'react'
-import { campanaActiva, lotes, vacunaciones, jornadas, usuarios, calcularAlertas } from '../data/mock.js'
+import React, { useState, useEffect } from 'react'
 import ExcelJS from 'exceljs'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
@@ -8,15 +7,59 @@ export default function Reportes() {
   const [tipoReporte, setTipoReporte] = useState('completo')
   const [tabActiva, setTabActiva] = useState('vacunaciones')
 
+  const [data, setData] = useState({
+    vacunaciones: [], lotes: [], jornadas: [], usuarios: [], alertasLotes: [],
+    campanaActiva: { nombre: 'Ninguna', meta: 5000, periodo: '', estado: 'Inactivo' },
+    loading: true
+  })
+
+  useEffect(() => {
+    async function loadAll() {
+      try {
+        const [rVac, rLot, rJor, rUsu, rCam] = await Promise.all([
+          fetch('http://localhost:5119/api/vacunaciones'),
+          fetch('http://localhost:5119/api/lotes'),
+          fetch('http://localhost:5119/api/jornadas'),
+          fetch('http://localhost:5119/api/usuarios'),
+          fetch('http://localhost:5119/api/campañas')
+        ])
+        
+        const vacs = await rVac.json()
+        const lotesRaw = await rLot.json()
+        const jor = await rJor.json()
+        const usu = await rUsu.json()
+        const cams = await rCam.json()
+
+        const activa = cams[cams.length - 1] || { nombre: 'Ninguna', fechaInicio: '', fechaFin: '', estado: 'Inactivo' }
+        
+        setData({
+          vacunaciones: vacs.map(v => ({ id: v.idVacunacion, persona: v.usuario?.nombre || '-', ci: '-', grupo: '-', vacuna: v.lote?.vacuna?.nombre || '-', dosis: v.dosis, lote: `LOTE-${v.idLote}`, fecha: new Date(v.fechaAplicacion).toLocaleDateString() })),
+          lotes: lotesRaw.map(l => ({ id: l.idLote, codigo: `LOTE-${l.idLote}`, vacuna: l.vacuna?.nombre || '-', cantidad: l.cantidadDisponible, minimo: 100, vencimiento: new Date(l.fechaVencimiento).toLocaleDateString() })),
+          jornadas: jor.map(j => ({ id: j.idJornada, fecha: new Date(j.fecha).toLocaleDateString(), horario: '-', punto: j.campaña?.nombre || '-', responsable: '-' })),
+          usuarios: usu.map(u => ({ id: u.idUsuario, nombre: u.nombre, usuario: u.correo, rol: u.rol?.nombreRol || '-', estado: 'Activo' })),
+          alertasLotes: lotesRaw.filter(l => l.cantidadDisponible < 100).map(l => ({ codigo: `LOTE-${l.idLote}` })),
+          campanaActiva: { ...activa, meta: 5000, estado: 'Activa', periodo: activa.fechaInicio ? `${new Date(activa.fechaInicio).toLocaleDateString()} - ${new Date(activa.fechaFin).toLocaleDateString()}` : '-' },
+          loading: false
+        })
+      } catch (e) {
+        console.error(e)
+        setData(d => ({ ...d, loading: false }))
+      }
+    }
+    loadAll()
+  }, [])
+
+  if (data.loading) return <div style={{ padding: 20 }}>Cargando módulo de reportes...</div>
+
+  const { vacunaciones, lotes, jornadas, usuarios, campanaActiva, alertasLotes } = data
   const meta = campanaActiva.meta
-  const totalDosisAplicadas = vacunaciones.length * 400
-  const porcentajeCobertura = Math.round((totalDosisAplicadas / meta) * 100)
+  const totalDosisAplicadas = vacunaciones.length
+  const porcentajeCobertura = meta > 0 ? Math.round((totalDosisAplicadas / meta) * 100) : 0
   const stockDisponibleTotal = lotes.reduce((sum, l) => sum + l.cantidad, 0)
-  const alertasLotes = calcularAlertas()
 
   // Conteo por tipo de vacuna aplicada
-  const vacunasSR = vacunaciones.filter(v => v.vacuna === 'SR').length * 400
-  const vacunasSRP = vacunaciones.filter(v => v.vacuna === 'SRP').length * 400
+  const vacunasSR = vacunaciones.filter(v => v.vacuna === 'SR').length
+  const vacunasSRP = vacunaciones.filter(v => v.vacuna === 'SRP').length
 
   // ==========================================
   // EXPORTACIÓN A EXCEL PROFESIONAL CON EXCELJS

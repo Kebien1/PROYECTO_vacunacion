@@ -1,22 +1,49 @@
-import { campanaActiva, poblacionObjetivo, vacunaciones, calcularAlertas } from '../data/mock.js'
+import { useState, useEffect } from 'react'
 
 export default function Dashboard() {
-  const meta = campanaActiva.meta
-  const vacunados = vacunaciones.length * 400
-  const cobertura = Math.min(100, Math.round((vacunados / meta) * 100))
-  const alertas = calcularAlertas()
+  const [data, setData] = useState({ vacunaciones: [], campañas: [], lotes: [], loading: true })
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const [resVac, resCam, resLot] = await Promise.all([
+          fetch('http://localhost:5119/api/vacunaciones'),
+          fetch('http://localhost:5119/api/campañas'),
+          fetch('http://localhost:5119/api/lotes')
+        ])
+        setData({
+          vacunaciones: await resVac.json(),
+          campañas: await resCam.json(),
+          lotes: await resLot.json(),
+          loading: false
+        })
+      } catch (e) {
+        console.error(e)
+        setData(d => ({ ...d, loading: false }))
+      }
+    }
+    load()
+  }, [])
+
+  if (data.loading) return <div style={{ padding: 20 }}>Cargando dashboard...</div>
+
+  const activa = data.campañas[data.campañas.length - 1] || { nombre: 'Ninguna', fechaInicio: '', fechaFin: '' }
+  const meta = 5000 // Meta hardcodeada ya que la DB no soporta meta por campaña actualmente
+  const vacunados = data.vacunaciones.length
+  const cobertura = meta > 0 ? Math.min(100, Math.round((vacunados / meta) * 100)) : 0
+  
+  const alertas = data.lotes.filter(l => l.cantidadDisponible < 100 || (new Date(l.fechaVencimiento) - new Date()) / (1000 * 60 * 60 * 24) < 30)
 
   const kpis = [
-    { valor: meta.toLocaleString(), label: 'Meta de población objetivo' },
-    { valor: vacunados.toLocaleString(), label: 'Personas vacunadas (est.)' },
+    { valor: meta.toLocaleString(), label: 'Meta (Estimada)' },
+    { valor: vacunados.toLocaleString(), label: 'Dosis aplicadas' },
     { valor: cobertura + '%', label: 'Cobertura alcanzada' },
     { valor: alertas.length, label: 'Alertas activas' }
   ]
 
-  const porGrupo = poblacionObjetivo.map((p) => ({
-    ...p,
-    vac: Math.round((p.objetivo * cobertura) / 100)
-  }))
+  const porGrupo = [
+    { grupo: 'General', objetivo: meta, vac: vacunados } // DB no soporta grupos poblacionales en vacunaciones
+  ]
 
   return (
     <>
@@ -30,8 +57,8 @@ export default function Dashboard() {
       </div>
 
       <div className="card">
-        <h2>Campaña activa: {campanaActiva.nombre}</h2>
-        <p><b>Periodo:</b> {campanaActiva.periodo} · <b>Estado:</b> {campanaActiva.estado} · <b>Vacuna:</b> {campanaActiva.vacunaPrincipal}</p>
+        <h2>Campaña activa: {activa.nombre}</h2>
+        <p><b>Inicio:</b> {new Date(activa.fechaInicio).toLocaleDateString()} · <b>Fin:</b> {new Date(activa.fechaFin).toLocaleDateString()}</p>
         <div className="bar"><span style={{ width: cobertura + '%' }} /></div>
         <p style={{ fontSize: 13, color: 'var(--muted)' }}>Cobertura: {cobertura}% de la meta</p>
       </div>
@@ -52,11 +79,15 @@ export default function Dashboard() {
         <div className="card">
           <h2>Alertas recientes</h2>
           {alertas.length === 0 && <div className="alert alert-ok">Sin alertas críticas.</div>}
-          {alertas.map((a) => (
-            <div key={a.codigo} className="alert" style={{ background: a.tipo.includes('Vencimiento') ? '#fef2f2' : '#fffbeb', borderColor: a.tipo.includes('Vencimiento') ? '#fecaca' : '#fde68a', color: a.tipo.includes('Vencimiento') ? '#b91c1c' : '#92400e' }}>
-              <b>{a.codigo}</b> ({a.vacuna}) — {a.tipo} · stock: {a.cantidad} · vence: {a.vencimiento}
-            </div>
-          ))}
+          {alertas.map((a) => {
+            const dias = Math.round((new Date(a.fechaVencimiento) - new Date()) / (1000 * 60 * 60 * 24))
+            const tipo = a.cantidadDisponible < 100 ? 'Stock Bajo' : 'Próximo a Vencer'
+            return (
+              <div key={a.idLote} className="alert" style={{ background: tipo.includes('Vencer') ? '#fef2f2' : '#fffbeb', borderColor: tipo.includes('Vencer') ? '#fecaca' : '#fde68a', color: tipo.includes('Vencer') ? '#b91c1c' : '#92400e' }}>
+                <b>LOTE-{a.idLote}</b> ({a.vacuna?.nombre}) — {tipo} · stock: {a.cantidadDisponible} · vence en: {dias} días
+              </div>
+            )
+          })}
         </div>
       </div>
     </>
