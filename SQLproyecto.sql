@@ -56,6 +56,17 @@ CREATE TABLE GruposPriorizados (
     FOREIGN KEY (IdPoblacion) REFERENCES PoblacionObjetivo(IdPoblacion)
 );
 
+-- Tabla de Pacientes (personas que reciben la vacuna)
+CREATE TABLE Pacientes (
+    IdPaciente INT PRIMARY KEY IDENTITY(1,1),
+    Nombre NVARCHAR(150) NOT NULL,
+    Cedula NVARCHAR(20) UNIQUE NOT NULL,
+    FechaNacimiento DATE NOT NULL,
+    Sexo NVARCHAR(10) NOT NULL,
+    IdGrupo INT NULL,
+    FOREIGN KEY (IdGrupo) REFERENCES GruposPriorizados(IdGrupo)
+);
+
 -- Tabla de Vacunas
 CREATE TABLE Vacunas (
     IdVacuna INT PRIMARY KEY IDENTITY(1,1),
@@ -75,14 +86,18 @@ CREATE TABLE Lotes (
 -- Tabla de Vacunaciones
 CREATE TABLE Vacunaciones (
     IdVacunacion INT PRIMARY KEY IDENTITY(1,1),
-    IdUsuario INT NOT NULL,
+    IdPaciente INT NOT NULL,
     IdCampaña INT NOT NULL,
     IdLote INT NOT NULL,
+    IdPunto INT NULL,
+    IdUsuarioAplicador INT NOT NULL,
     FechaAplicacion DATE NOT NULL,
     Dosis NVARCHAR(50) NOT NULL,
-    FOREIGN KEY (IdUsuario) REFERENCES Usuarios(IdUsuario),
+    FOREIGN KEY (IdPaciente) REFERENCES Pacientes(IdPaciente),
     FOREIGN KEY (IdCampaña) REFERENCES Campañas(IdCampaña),
-    FOREIGN KEY (IdLote) REFERENCES Lotes(IdLote)
+    FOREIGN KEY (IdLote) REFERENCES Lotes(IdLote),
+    FOREIGN KEY (IdPunto) REFERENCES PuntosVacunacion(IdPunto),
+    FOREIGN KEY (IdUsuarioAplicador) REFERENCES Usuarios(IdUsuario)
 );
 
 -- Tabla de Movimientos de Stock

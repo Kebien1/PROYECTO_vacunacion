@@ -13,6 +13,7 @@ public class Conexion : DbContext
     public DbSet<Jornada> jornada { get; set; }
     public DbSet<Lote> lote { get; set; }
     public DbSet<MovimientoStock> movimientostock { get; set; }
+    public DbSet<Paciente> paciente { get; set; }
     public DbSet<PoblacionObjetivo> poblacionobjetivo { get; set; }
     public DbSet<PuntoVacunacion> puntovacunacion { get; set; }
     public DbSet<Reporte> reporte { get; set; }
@@ -31,6 +32,7 @@ public class Conexion : DbContext
         modelBuilder.Entity<Jornada>().HasKey(x => x.IdJornada);
         modelBuilder.Entity<Lote>().HasKey(x => x.IdLote);
         modelBuilder.Entity<MovimientoStock>().HasKey(x => x.IdMovimiento);
+        modelBuilder.Entity<Paciente>().HasKey(x => x.IdPaciente);
         modelBuilder.Entity<PoblacionObjetivo>().HasKey(x => x.IdPoblacion);
         modelBuilder.Entity<PuntoVacunacion>().HasKey(x => x.IdPunto);
         modelBuilder.Entity<Reporte>().HasKey(x => x.IdReporte);
@@ -49,14 +51,17 @@ public class Conexion : DbContext
         modelBuilder.Entity<PoblacionObjetivo>().HasOne(x => x.Campaña).WithMany(x => x.Poblaciones).HasForeignKey(x => x.IdCampaña);
         modelBuilder.Entity<PoblacionObjetivo>().HasMany(x => x.Grupos).WithOne(x => x.PoblacionObjetivo).HasForeignKey(x => x.IdPoblacion);
         modelBuilder.Entity<GrupoPriorizado>().HasOne(x => x.PoblacionObjetivo).WithMany(x => x.Grupos).HasForeignKey(x => x.IdPoblacion);
+        modelBuilder.Entity<Paciente>().HasOne(x => x.GrupoPriorizado).WithMany().HasForeignKey(x => x.IdGrupo);
         modelBuilder.Entity<Lote>().HasOne(x => x.Vacuna).WithMany(x => x.Lotes).HasForeignKey(x => x.IdVacuna);
         modelBuilder.Entity<Alerta>().HasOne(x => x.Lote).WithMany().HasForeignKey(x => x.IdLote);
         modelBuilder.Entity<MovimientoStock>().HasOne(x => x.Lote).WithMany().HasForeignKey(x => x.IdLote);
         modelBuilder.Entity<Jornada>().HasOne(x => x.Campaña).WithMany().HasForeignKey(x => x.IdCampaña);
         modelBuilder.Entity<PuntoVacunacion>().HasOne(x => x.Jornada).WithMany(x => x.Puntos).HasForeignKey(x => x.IdJornada);
-        modelBuilder.Entity<Vacunacion>().HasOne(x => x.Usuario).WithMany().HasForeignKey(x => x.IdUsuario);
+        modelBuilder.Entity<Vacunacion>().HasOne(x => x.Paciente).WithMany().HasForeignKey(x => x.IdPaciente);
         modelBuilder.Entity<Vacunacion>().HasOne(x => x.Campaña).WithMany(x => x.Vacunaciones).HasForeignKey(x => x.IdCampaña);
         modelBuilder.Entity<Vacunacion>().HasOne(x => x.Lote).WithMany().HasForeignKey(x => x.IdLote);
+        modelBuilder.Entity<Vacunacion>().HasOne(x => x.PuntoVacunacion).WithMany().HasForeignKey(x => x.IdPunto);
+        modelBuilder.Entity<Vacunacion>().HasOne(x => x.UsuarioAplicador).WithMany().HasForeignKey(x => x.IdUsuarioAplicador);
 
         modelBuilder.Entity<Alerta>().ToTable("Alertas");
         modelBuilder.Entity<Campaña>().ToTable("Campañas");
@@ -66,6 +71,7 @@ public class Conexion : DbContext
         modelBuilder.Entity<Jornada>().ToTable("Jornadas");
         modelBuilder.Entity<Lote>().ToTable("Lotes");
         modelBuilder.Entity<MovimientoStock>().ToTable("MovimientosStock");
+        modelBuilder.Entity<Paciente>().ToTable("Pacientes");
         modelBuilder.Entity<PoblacionObjetivo>().ToTable("PoblacionObjetivo");
         modelBuilder.Entity<PuntoVacunacion>().ToTable("PuntosVacunacion");
         modelBuilder.Entity<Reporte>().ToTable("Reportes");

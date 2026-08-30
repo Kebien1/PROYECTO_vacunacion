@@ -81,10 +81,26 @@ public static class DatabaseSeeder
         context.poblacionobjetivo.AddRange(populations);
         context.SaveChanges();
 
-        context.grupopriorizado.AddRange(
+        var groups = new[]
+        {
             new GrupoPriorizado { NombreGrupo = "Primera infancia", IdPoblacion = populations[0].IdPoblacion },
             new GrupoPriorizado { NombreGrupo = "Escolares", IdPoblacion = populations[1].IdPoblacion },
-            new GrupoPriorizado { NombreGrupo = "Adolescentes", IdPoblacion = populations[2].IdPoblacion });
+            new GrupoPriorizado { NombreGrupo = "Adolescentes", IdPoblacion = populations[2].IdPoblacion }
+        };
+        context.grupopriorizado.AddRange(groups);
+        context.SaveChanges();
+
+        // Pacientes de prueba
+        var patients = new[]
+        {
+            new Paciente { Nombre = "María López Pérez", Cedula = "12345678", FechaNacimiento = new DateTime(2023, 3, 15), Sexo = "F", IdGrupo = groups[0].IdGrupo },
+            new Paciente { Nombre = "Carlos Rodríguez", Cedula = "23456789", FechaNacimiento = new DateTime(2018, 7, 22), Sexo = "M", IdGrupo = groups[1].IdGrupo },
+            new Paciente { Nombre = "Ana Martínez Silva", Cedula = "34567890", FechaNacimiento = new DateTime(2010, 11, 5), Sexo = "F", IdGrupo = groups[2].IdGrupo },
+            new Paciente { Nombre = "Pedro Gómez Torres", Cedula = "45678901", FechaNacimiento = new DateTime(2024, 1, 10), Sexo = "M", IdGrupo = groups[0].IdGrupo },
+            new Paciente { Nombre = "Lucía Fernández", Cedula = "56789012", FechaNacimiento = new DateTime(2015, 5, 30), Sexo = "F", IdGrupo = groups[1].IdGrupo }
+        };
+        context.paciente.AddRange(patients);
+        context.SaveChanges();
 
         var lots = new[]
         {
@@ -100,10 +116,14 @@ public static class DatabaseSeeder
         context.jornada.AddRange(journeys);
         context.SaveChanges();
 
-        context.puntovacunacion.AddRange(
+        var points = new[]
+        {
             new PuntoVacunacion { Nombre = "Puesto Centro de Salud", Direccion = centers[0].Direccion, IdJornada = journeys[0].IdJornada },
             new PuntoVacunacion { Nombre = "Puesto Barrio Norte", Direccion = centers[1].Direccion, IdJornada = journeys[1].IdJornada },
-            new PuntoVacunacion { Nombre = "Brigada Plaza Central", Direccion = centers[2].Direccion, IdJornada = journeys[2].IdJornada });
+            new PuntoVacunacion { Nombre = "Brigada Plaza Central", Direccion = centers[2].Direccion, IdJornada = journeys[2].IdJornada }
+        };
+        context.puntovacunacion.AddRange(points);
+        context.SaveChanges();
 
         context.movimientostock.AddRange(
             new MovimientoStock { TipoMovimiento = "Entrada", Cantidad = 500, FechaMovimiento = days[0], IdLote = lots[0].IdLote },
@@ -117,9 +137,9 @@ public static class DatabaseSeeder
 
         var staff = context.usuario.First(user => user.Correo == "vacunador");
         context.vacunacion.AddRange(
-            new Vacunacion { FechaAplicacion = days[0], Dosis = "1ra", IdUsuario = staff.IdUsuario, IdCampaña = campaign.IdCampaña, IdLote = lots[0].IdLote },
-            new Vacunacion { FechaAplicacion = days[1], Dosis = "1ra", IdUsuario = staff.IdUsuario, IdCampaña = campaign.IdCampaña, IdLote = lots[1].IdLote },
-            new Vacunacion { FechaAplicacion = days[2], Dosis = "2da", IdUsuario = staff.IdUsuario, IdCampaña = campaign.IdCampaña, IdLote = lots[2].IdLote });
+            new Vacunacion { FechaAplicacion = days[0], Dosis = "1ra", IdPaciente = patients[0].IdPaciente, IdCampaña = campaign.IdCampaña, IdLote = lots[0].IdLote, IdPunto = points[0].IdPunto, IdUsuarioAplicador = staff.IdUsuario },
+            new Vacunacion { FechaAplicacion = days[1], Dosis = "1ra", IdPaciente = patients[1].IdPaciente, IdCampaña = campaign.IdCampaña, IdLote = lots[1].IdLote, IdPunto = points[1].IdPunto, IdUsuarioAplicador = staff.IdUsuario },
+            new Vacunacion { FechaAplicacion = days[2], Dosis = "2da", IdPaciente = patients[2].IdPaciente, IdCampaña = campaign.IdCampaña, IdLote = lots[2].IdLote, IdPunto = points[2].IdPunto, IdUsuarioAplicador = staff.IdUsuario });
 
         context.indicador.AddRange(
             new Indicador { NombreIndicador = "Dosis aplicadas día 1", Valor = 1, IdCampaña = campaign.IdCampaña },
