@@ -30,6 +30,21 @@ export default function Campanas() {
   const crear = async () => {
     if (!nueva.nombre || !nueva.fechaInicio || !nueva.fechaFin || !nueva.idCentro) return
     
+    const inicio = new Date(nueva.fechaInicio + 'T00:00:00');
+    const hoy = new Date();
+    hoy.setHours(0,0,0,0);
+    
+    if (inicio < hoy) {
+      alert('No se pueden crear campañas con fechas anteriores al día de hoy');
+      return;
+    }
+
+    if (new Date(nueva.fechaFin + 'T00:00:00') < inicio) {
+      alert('La fecha de fin no puede ser anterior a la fecha de inicio');
+      return;
+    }
+    
+
     try {
       const res = await fetch('http://localhost:5119/api/campañas', {
         method: 'POST',

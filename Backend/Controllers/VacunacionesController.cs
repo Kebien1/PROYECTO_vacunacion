@@ -36,7 +36,9 @@ namespace Backend.Controllers
         {
             var vacunacion = _context.vacunacion
                 .Include(v => v.Paciente)
+                    .ThenInclude(p => p.GrupoPriorizado)
                 .Include(v => v.Lote).ThenInclude(l => l.Vacuna)
+                .Include(v => v.Campaña)
                 .Include(v => v.PuntoVacunacion)
                 .Include(v => v.UsuarioAplicador)
                 .FirstOrDefault(v => v.IdVacunacion == id);

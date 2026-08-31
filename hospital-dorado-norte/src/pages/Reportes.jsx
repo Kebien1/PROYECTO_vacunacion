@@ -7,6 +7,11 @@ export default function Reportes() {
   const [tipoReporte, setTipoReporte] = useState('completo')
   const [tabActiva, setTabActiva] = useState('vacunaciones')
 
+  // Filtro de fechas
+  const [filtroFecha, setFiltroFecha] = useState('todo') // 'todo' | 'hoy' | 'semana' | 'mes' | 'rango'
+  const [fechaDesde, setFechaDesde] = useState('')
+  const [fechaHasta, setFechaHasta] = useState('')
+
   const [data, setData] = useState({
     vacunaciones: [], lotes: [], jornadas: [], usuarios: [], alertasLotes: [],
     campanaActiva: { nombre: 'Ninguna', meta: 5000, periodo: '', estado: 'Inactivo' },
@@ -33,9 +38,25 @@ export default function Reportes() {
         const activa = cams[cams.length - 1] || { nombre: 'Ninguna', fechaInicio: '', fechaFin: '', estado: 'Inactivo' }
         
         setData({
-          vacunaciones: vacs.map(v => ({ id: v.idVacunacion, persona: v.usuario?.nombre || '-', ci: '-', grupo: '-', vacuna: v.lote?.vacuna?.nombre || '-', dosis: v.dosis, lote: `LOTE-${v.idLote}`, fecha: new Date(v.fechaAplicacion).toLocaleDateString() })),
-          lotes: lotesRaw.map(l => ({ id: l.idLote, codigo: `LOTE-${l.idLote}`, vacuna: l.vacuna?.nombre || '-', cantidad: l.cantidadDisponible, minimo: 100, vencimiento: new Date(l.fechaVencimiento).toLocaleDateString() })),
-          jornadas: jor.map(j => ({ id: j.idJornada, fecha: new Date(j.fecha).toLocaleDateString(), horario: '-', punto: j.campaña?.nombre || '-', responsable: '-' })),
+          vacunaciones: vacs.map(v => {
+            let edad = '-';
+            if (v.paciente?.fechaNacimiento) {
+              edad = (new Date().getFullYear() - new Date(v.paciente.fechaNacimiento).getFullYear()) + ' años';
+            }
+            return { 
+              id: v.idVacunacion, 
+              persona: v.paciente?.nombre || '-', 
+              ci: v.paciente?.cedula || '-', 
+              grupo: v.paciente?.grupoPriorizado?.nombreGrupo || edad, 
+              vacuna: v.lote?.vacuna?.nombre || '-', 
+              dosis: v.dosis, 
+              lote: `LOTE-${v.idLote}`, 
+              fechaRaw: new Date(v.fechaAplicacion),
+              fecha: new Date(v.fechaAplicacion).toLocaleDateString() 
+            };
+          }),
+          lotes: lotesRaw.map(l => ({ id: l.idLote, codigo: `LOTE-${l.idLote}`, vacuna: l.vacuna?.nombre || '-', cantidad: l.cantidadDisponible, minimo: 100, fechaRaw: new Date(l.fechaVencimiento), vencimiento: new Date(l.fechaVencimiento).toLocaleDateString() })),
+          jornadas: jor.map(j => ({ id: j.idJornada, fechaRaw: new Date(j.fecha), fecha: new Date(j.fecha).toLocaleDateString(), horario: '08:00 - 16:00', punto: j.campaña?.centroSalud?.nombre || j.campaña?.nombre || 'Punto Móvil', responsable: 'Brigada Asignada' })),
           usuarios: usu.map(u => ({ id: u.idUsuario, nombre: u.nombre, usuario: u.correo, rol: u.rol?.nombreRol || '-', estado: 'Activo' })),
           alertasLotes: lotesRaw.filter(l => l.cantidadDisponible < 100).map(l => ({ codigo: `LOTE-${l.idLote}` })),
           campanaActiva: { ...activa, meta: 5000, estado: 'Activa', periodo: activa.fechaInicio ? `${new Date(activa.fechaInicio).toLocaleDateString()} - ${new Date(activa.fechaFin).toLocaleDateString()}` : '-' },
@@ -51,7 +72,69 @@ export default function Reportes() {
 
   if (data.loading) return <div style={{ padding: 20 }}>Cargando módulo de reportes...</div>
 
-  const { vacunaciones, lotes, jornadas, usuarios, campanaActiva, alertasLotes } = data
+  const { vacunaciones: allVacunaciones, lotes, jornadas: allJornadas, usuarios, campanaActiva, alertasLotes } = data
+
+  // ==========================================
+  // FILTRADO POR FECHAS
+  // ==========================================
+  const obtenerRangoFechas = () => {
+    const hoy = new Date()
+    hoy.setHours(0, 0, 0, 0)
+
+    switch (filtroFecha) {
+      case 'hoy': {
+        const fin = new Date(hoy)
+        fin.setHours(23, 59, 59, 999)
+        return { desde: hoy, hasta: fin }
+      }
+      case 'semana': {
+        const inicioSemana = new Date(hoy)
+        const dia = inicioSemana.getDay()
+        inicioSemana.setDate(inicioSemana.getDate() - (dia === 0 ? 6 : dia - 1)) // Lunes
+        const finSemana = new Date(inicioSemana)
+        finSemana.setDate(finSemana.getDate() + 6)
+        finSemana.setHours(23, 59, 59, 999)
+        return { desde: inicioSemana, hasta: finSemana }
+      }
+      case 'mes': {
+        const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
+        const finMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0)
+        finMes.setHours(23, 59, 59, 999)
+        return { desde: inicioMes, hasta: finMes }
+      }
+      case 'rango': {
+        if (!fechaDesde || !fechaHasta) return null
+        const desde = new Date(fechaDesde + 'T00:00:00')
+        const hasta = new Date(fechaHasta + 'T23:59:59')
+        return { desde, hasta }
+      }
+      default:
+        return null // 'todo' = sin filtro
+    }
+  }
+
+  const rango = obtenerRangoFechas()
+
+  const filtrarPorFecha = (items) => {
+    if (!rango) return items
+    return items.filter(item => item.fechaRaw >= rango.desde && item.fechaRaw <= rango.hasta)
+  }
+
+  const vacunaciones = filtrarPorFecha(allVacunaciones)
+  const jornadas = filtrarPorFecha(allJornadas)
+
+  const etiquetaFiltro = () => {
+    if (filtroFecha === 'todo') return 'Todos los registros'
+    if (filtroFecha === 'hoy') return `Hoy (${new Date().toLocaleDateString()})`
+    if (filtroFecha === 'semana') return 'Esta semana (Lun - Dom)'
+    if (filtroFecha === 'mes') {
+      const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+      return `${meses[new Date().getMonth()]} ${new Date().getFullYear()}`
+    }
+    if (filtroFecha === 'rango' && rango) return `${rango.desde.toLocaleDateString()} — ${rango.hasta.toLocaleDateString()}`
+    return 'Seleccione rango'
+  }
+
   const meta = campanaActiva.meta
   const totalDosisAplicadas = vacunaciones.length
   const porcentajeCobertura = meta > 0 ? Math.round((totalDosisAplicadas / meta) * 100) : 0
@@ -536,11 +619,72 @@ export default function Reportes() {
         </div>
       </div>
 
+      {/* Barra de Filtro por Fechas */}
+      <div className="card" style={{ padding: '12px 18px', marginBottom: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <strong style={{ fontSize: 13, color: '#334155', marginRight: 4 }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ verticalAlign: 'middle', marginRight: 4 }}>
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+            Periodo:
+          </strong>
+          {[
+            { key: 'todo', label: 'Todo' },
+            { key: 'hoy', label: 'Hoy' },
+            { key: 'semana', label: 'Esta Semana' },
+            { key: 'mes', label: 'Este Mes' },
+            { key: 'rango', label: 'Rango Personalizado' }
+          ].map(f => (
+            <button
+              key={f.key}
+              onClick={() => setFiltroFecha(f.key)}
+              style={{
+                padding: '5px 14px',
+                borderRadius: 6,
+                border: filtroFecha === f.key ? '2px solid #033a60' : '1px solid #cbd5e1',
+                background: filtroFecha === f.key ? '#033a60' : '#fff',
+                color: filtroFecha === f.key ? '#fff' : '#334155',
+                fontWeight: filtroFecha === f.key ? 700 : 500,
+                fontSize: 12,
+                cursor: 'pointer',
+                transition: 'all 0.15s'
+              }}
+            >
+              {f.label}
+            </button>
+          ))}
+
+          {filtroFecha === 'rango' && (
+            <>
+              <input
+                type="date"
+                className="input"
+                value={fechaDesde}
+                onChange={e => setFechaDesde(e.target.value)}
+                style={{ maxWidth: 150, fontSize: 12, padding: '5px 8px' }}
+              />
+              <span style={{ color: '#64748b', fontSize: 12 }}>a</span>
+              <input
+                type="date"
+                className="input"
+                value={fechaHasta}
+                onChange={e => setFechaHasta(e.target.value)}
+                style={{ maxWidth: 150, fontSize: 12, padding: '5px 8px' }}
+              />
+            </>
+          )}
+
+          <span style={{ marginLeft: 'auto', fontSize: 12, color: '#64748b', fontStyle: 'italic' }}>
+            {etiquetaFiltro()} — {vacunaciones.length} vacunaciones, {jornadas.length} jornadas
+          </span>
+        </div>
+      </div>
+
       {/* Tarjetas de Resumen Operativo */}
       <div className="grid grid-4" style={{ marginBottom: 18 }}>
         <div className="kpi">
           <div className="valor">{totalDosisAplicadas.toLocaleString()}</div>
-          <div className="label">Dosis Aplicadas Totales</div>
+          <div className="label">Dosis Aplicadas{filtroFecha !== 'todo' ? ' (filtrado)' : ' Totales'}</div>
         </div>
         <div className="kpi">
           <div className="valor">{stockDisponibleTotal.toLocaleString()}</div>
@@ -552,7 +696,7 @@ export default function Reportes() {
         </div>
         <div className="kpi">
           <div className="valor">{jornadas.length}</div>
-          <div className="label">Jornadas Programadas</div>
+          <div className="label">Jornadas{filtroFecha !== 'todo' ? ' (filtrado)' : ' Programadas'}</div>
         </div>
       </div>
 

@@ -1,5 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../auth.jsx'
+import jsPDF from 'jspdf'
+import logoUrl from '../../public/LOGO.png'
+
+const formatearNombre = (nombre) => {
+  return nombre.toLowerCase().replace(/(?:^|\s)\S/g, (a) => a.toUpperCase());
+}
 
 export default function Vacunaciones() {
   const { sesion } = useAuth()
@@ -82,6 +88,14 @@ export default function Vacunaciones() {
       setMensaje({ tipo: 'error', texto: 'Complete todos los campos del paciente' })
       return null
     }
+
+    const fechaNac = new Date(form.pacFechaNac + 'T00:00:00');
+    const hoy = new Date();
+    if (fechaNac > hoy) {
+      setMensaje({ tipo: 'error', texto: 'La fecha de nacimiento no puede ser en el futuro' })
+      return null;
+    }
+
     try {
       const res = await fetch('http://localhost:5119/api/pacientes', {
         method: 'POST',
@@ -141,7 +155,20 @@ export default function Vacunaciones() {
       })
 
       if (res.ok) {
-        setMensaje({ tipo: 'ok', texto: '✓ Vacunación registrada correctamente' })
+        const nuevaVac = await res.json()
+        setMensaje({ tipo: 'ok', texto: '✓ Vacunación registrada correctamente. Generando carnet...' })
+
+        // Obtener la vacunación completa con relaciones para el carnet
+        try {
+          const resDetalle = await fetch(`http://localhost:5119/api/vacunaciones/${nuevaVac.idVacunacion || nuevaVac.IdVacunacion}`)
+          if (resDetalle.ok) {
+            const vacCompleta = await resDetalle.json()
+            generarCarnetPDF(vacCompleta)
+          }
+        } catch (e) {
+          console.error('No se pudo generar el carnet automáticamente', e)
+        }
+
         setPacienteEncontrado(null)
         setBusquedaCedula('')
         setForm(f => ({
@@ -180,6 +207,303 @@ export default function Vacunaciones() {
       return `${meses} meses`
     }
     return `${edad} años`
+  }
+
+  // ==========================================
+  // GENERADOR DE CARNET DE VACUNACIÓN PDF
+  // ==========================================
+  const generarCarnetPDF = async (vacunacion) => {
+    const pac = vacunacion.paciente
+    const loteInfo = vacunacion.lote
+    const vacunaInfo = loteInfo?.vacuna
+    const campanaInfo = vacunacion.campaña || campañas.find(c => c.idCampaña === vacunacion.idCampaña)
+    const puntoInfo = vacunacion.puntoVacunacion
+    const aplicador = vacunacion.usuarioAplicador
+    const fechaApp = new Date(vacunacion.fechaAplicacion)
+
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a5' })
+    const W = 148 // A5 width
+    const H = 210 // A5 height
+
+    // Colors
+    const PRIMARY = [3, 58, 96]       // #033A60
+    const SECONDARY = [2, 132, 199]   // #0284C7
+    const DARK = [15, 23, 42]         // #0F172A
+    const MUTED = [100, 116, 139]     // #64748B
+    const LIGHT_BG = [248, 250, 252]  // #F8FAFC
+    const WHITE = [255, 255, 255]
+    const ACCENT = [5, 150, 105]      // #059669
+    const GOLD = [180, 140, 50]
+
+    // Unique verification code
+    const codigoVerificacion = `VAC-${vacunacion.idVacunacion.toString().padStart(6, '0')}-${fechaApp.getFullYear()}`
+
+    // ── TOP BANNER ──
+    doc.setFillColor(...PRIMARY)
+    doc.rect(0, 0, W, 32, 'F')
+
+    // Subtle gradient overlay
+    doc.setFillColor(2, 43, 71)
+    doc.rect(0, 26, W, 6, 'F')
+
+    // Logo image
+    try {
+      const logoData = await new Promise((resolve, reject) => {
+        const img = new Image()
+        img.onload = () => {
+          const maxSize = 400
+          const scale = Math.min(maxSize / img.width, maxSize / img.height)
+          const canvas = document.createElement('canvas')
+          canvas.width = img.width * scale
+          canvas.height = img.height * scale
+          const ctx = canvas.getContext('2d')
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+          
+          // Hacemos el fondo blanco transparente para que los márgenes no tapen el banner
+          const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+          const data = imgData.data
+          for (let i = 0; i < data.length; i += 4) {
+            if (data[i] > 240 && data[i+1] > 240 && data[i+2] > 240) {
+              data[i+3] = 0 // Alpha to 0 (transparent)
+            }
+          }
+          ctx.putImageData(imgData, 0, 0)
+          
+          resolve({ url: canvas.toDataURL('image/png'), ratio: img.width / img.height })
+        }
+        img.onerror = (err) => { 
+          console.error('Error cargando logo:', err)
+          reject(new Error('No se pudo cargar la imagen del logo')) 
+        }
+        img.src = logoUrl
+      })
+      
+      // Fondo blanco redondeado (esto es lo que dará el contraste a las letras oscuras)
+      doc.setFillColor(...WHITE)
+      doc.roundedRect(4, 2, 28, 28, 3, 3, 'F')
+      
+      // Dibujamos la imagen MUCHO MÁS GRANDE (38x38) porque la imagen original tiene 
+      // mucho margen blanco en blanco. Como el fondo ahora es transparente, 
+      // el margen no tapará el banner azul.
+      let maxW = 38
+      let maxH = 38
+      let w = maxW
+      let h = maxH
+      if (logoData.ratio > 1) {
+        h = maxW / logoData.ratio
+      } else {
+        w = maxH * logoData.ratio
+      }
+      
+      // Centramos la imagen sobre el recuadro blanco (cuyo centro es X:18, Y:16)
+      const x = 18 - (w / 2)
+      const y = 16 - (h / 2)
+      
+      doc.addImage(logoData.url, 'PNG', x, y, w, h)
+    } catch (e) {
+      console.error(e)
+      // Fallback: draw a simple placeholder if logo fails
+      doc.setFillColor(...WHITE)
+      doc.roundedRect(8, 5, 22, 22, 3, 3, 'F')
+      doc.setFontSize(7)
+      doc.setTextColor(...PRIMARY)
+      doc.text('LOGO', 19, 17, { align: 'center' })
+    }
+
+    // Institution name
+    doc.setTextColor(...WHITE)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(13)
+    doc.text('CENTRO DE SALUD', 35, 11)
+    doc.setFontSize(15)
+    doc.text('DORADO NORTE', 35, 18)
+
+    // Subtitle
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(7)
+    doc.setTextColor(180, 210, 240)
+    doc.text('Salud Pública — Estado Plurinacional de Bolivia', 35, 24)
+
+    // Document title ribbon
+    doc.setFillColor(...SECONDARY)
+    doc.roundedRect(W / 2 - 42, 29, 84, 9, 2, 2, 'F')
+    doc.setTextColor(...WHITE)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9)
+    doc.text('CARNET DE VACUNACIÓN', W / 2, 35, { align: 'center' })
+
+    // ── VERIFICATION CODE BAR ──
+    doc.setFillColor(...LIGHT_BG)
+    doc.roundedRect(8, 41, W - 16, 10, 2, 2, 'F')
+    doc.setDrawColor(203, 213, 225)
+    doc.setLineWidth(0.3)
+    doc.roundedRect(8, 41, W - 16, 10, 2, 2, 'S')
+
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(7)
+    doc.setTextColor(...MUTED)
+    doc.text('Código de Verificación:', 12, 47)
+    doc.setFont('courier', 'bold')
+    doc.setFontSize(9)
+    doc.setTextColor(...PRIMARY)
+    doc.text(codigoVerificacion, 52, 47)
+
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(6.5)
+    doc.setTextColor(...MUTED)
+    const fechaEmision = new Date()
+    doc.text(`Emisión: ${fechaEmision.toLocaleDateString('es-BO')} ${fechaEmision.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, W - 12, 47, { align: 'right' })
+
+    // ── PATIENT DATA SECTION ──
+    let y = 56
+    doc.setFillColor(...PRIMARY)
+    doc.roundedRect(8, y, W - 16, 7, 1.5, 1.5, 'F')
+    doc.setTextColor(...WHITE)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(8)
+    doc.text('DATOS DEL PACIENTE', 12, y + 5)
+
+    y += 10
+    const boxY = y
+    doc.setFillColor(...LIGHT_BG)
+    doc.roundedRect(8, boxY, W - 16, 32, 2, 2, 'F')
+    doc.setDrawColor(226, 232, 240)
+    doc.setLineWidth(0.3)
+    doc.roundedRect(8, boxY, W - 16, 32, 2, 2, 'S')
+
+    const labelStyle = () => { doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(...MUTED) }
+    const valueStyle = () => { doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...DARK) }
+
+    // Row 1
+    labelStyle(); doc.text('Nombre Completo:', 12, y + 5)
+    valueStyle(); doc.text(pac?.nombre || '-', 46, y + 5)
+
+    // Row 2
+    y += 8
+    labelStyle(); doc.text('C.I. / Documento:', 12, y + 5)
+    valueStyle(); doc.text(pac?.cedula || '-', 46, y + 5)
+
+    labelStyle(); doc.text('Sexo:', 85, y + 5)
+    valueStyle(); doc.text(pac?.sexo === 'M' ? 'Masculino' : pac?.sexo === 'F' ? 'Femenino' : '-', 96, y + 5)
+
+    // Row 3
+    y += 8
+    labelStyle(); doc.text('Fecha de Nacimiento:', 12, y + 5)
+    valueStyle()
+    const fechaNacStr = pac?.fechaNacimiento ? new Date(pac.fechaNacimiento).toLocaleDateString('es-BO') : '-'
+    doc.text(fechaNacStr, 50, y + 5)
+
+    labelStyle(); doc.text('Edad:', 85, y + 5)
+    valueStyle(); doc.text(calcularEdad(pac?.fechaNacimiento), 96, y + 5)
+
+    // Row 4
+    y += 8
+    labelStyle(); doc.text('Grupo Priorizado:', 12, y + 5)
+    valueStyle(); doc.text(pac?.grupoPriorizado?.nombreGrupo || 'General', 46, y + 5)
+
+    // ── VACCINATION DATA SECTION ──
+    y = boxY + 36
+    doc.setFillColor(...ACCENT)
+    doc.roundedRect(8, y, W - 16, 7, 1.5, 1.5, 'F')
+    doc.setTextColor(...WHITE)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(8)
+    doc.text('DATOS DE LA VACUNACIÓN', 12, y + 5)
+
+    y += 10
+    const vacBoxY = y
+    doc.setFillColor(240, 253, 244) // green-50
+    doc.roundedRect(8, vacBoxY, W - 16, 32, 2, 2, 'F')
+    doc.setDrawColor(167, 243, 208)
+    doc.setLineWidth(0.3)
+    doc.roundedRect(8, vacBoxY, W - 16, 32, 2, 2, 'S')
+
+    // Row 1 - Vacuna
+    labelStyle(); doc.text('Vacuna Aplicada:', 12, y + 5)
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(...ACCENT)
+    doc.text(vacunaInfo?.nombre || '-', 46, y + 5)
+
+    // Row 2 - Dosis and Lote
+    y += 8
+    labelStyle(); doc.text('Dosis:', 12, y + 5)
+    valueStyle(); doc.text(vacunacion.dosis || '-', 46, y + 5)
+
+    labelStyle(); doc.text('N° Lote:', 85, y + 5)
+    doc.setFont('courier', 'bold'); doc.setFontSize(8.5); doc.setTextColor(...DARK)
+    doc.text(`LOTE-${vacunacion.idLote}`, 103, y + 5)
+
+    // Row 3 - Fecha and Campaña
+    y += 8
+    labelStyle(); doc.text('Fecha de Aplicación:', 12, y + 5)
+    valueStyle(); doc.text(fechaApp.toLocaleDateString('es-BO'), 50, y + 5)
+
+    labelStyle(); doc.text('Campaña:', 85, y + 5)
+    valueStyle(); doc.text(campanaInfo?.nombre || '-', 103, y + 5)
+
+    // Row 4 - Punto
+    y += 8
+    labelStyle(); doc.text('Punto de Vacunación:', 12, y + 5)
+    valueStyle(); doc.text(puntoInfo?.nombre || 'Centro de Salud Dorado Norte', 50, y + 5)
+
+    // ── APPLICATOR & SIGNATURES ──
+    y = vacBoxY + 36
+    doc.setFillColor(30, 58, 95)
+    doc.roundedRect(8, y, W - 16, 7, 1.5, 1.5, 'F')
+    doc.setTextColor(...WHITE)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(8)
+    doc.text('PROFESIONAL RESPONSABLE', 12, y + 5)
+
+    y += 10
+    labelStyle(); doc.text('Aplicador:', 12, y + 4)
+    valueStyle(); doc.text(aplicador?.nombre || sesion?.nombre || '-', 46, y + 4)
+
+    // Signature lines
+    y += 14
+    doc.setDrawColor(...MUTED)
+    doc.setLineWidth(0.4)
+
+    // Left signature
+    doc.line(14, y, 62, y)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(6.5)
+    doc.setTextColor(...MUTED)
+    doc.text('Firma del Profesional de Salud', 38, y + 4, { align: 'center' })
+
+    // Right signature
+    doc.line(82, y, 134, y)
+    doc.text('Sello del Centro de Salud', 108, y + 4, { align: 'center' })
+
+    // ── FOOTER NOTES ──
+    y += 12
+    doc.setDrawColor(226, 232, 240)
+    doc.setLineWidth(0.3)
+    doc.line(8, y, W - 8, y)
+
+    y += 4
+    doc.setFont('helvetica', 'italic')
+    doc.setFontSize(5.5)
+    doc.setTextColor(...MUTED)
+    const notas = [
+      'Este documento certifica la aplicación de la vacuna indicada al paciente identificado.',
+      'Conserve este carnet como comprobante oficial. Preséntelo en su próxima cita de vacunación.',
+      'En caso de reacciones adversas, acuda inmediatamente al centro de salud más cercano.',
+      `Documento generado electrónicamente por el SGCV — ${codigoVerificacion}`
+    ]
+    notas.forEach((nota, i) => {
+      doc.text(`• ${nota}`, 10, y + (i * 4))
+    })
+
+    // Bottom decorative bar
+    doc.setFillColor(...PRIMARY)
+    doc.rect(0, H - 6, W, 6, 'F')
+    doc.setFontSize(5)
+    doc.setTextColor(...WHITE)
+    doc.text('Centro de Salud Dorado Norte — Salud Pública — Bolivia', W / 2, H - 2, { align: 'center' })
+
+    // Save
+    const nombreArchivo = `Carnet_Vacunacion_${(pac?.nombre || 'paciente').replace(/\s+/g, '_')}_${codigoVerificacion}.pdf`
+    doc.save(nombreArchivo)
   }
 
   // Filtrar lotes por vacuna seleccionada (opcional)
@@ -240,8 +564,8 @@ export default function Vacunaciones() {
           ) : (
             <>
               <div className="row">
-                <input className="input" placeholder="Nombre completo" value={form.pacNombre} onChange={e => setForm(f => ({ ...f, pacNombre: e.target.value }))} />
-                <input className="input" placeholder="Cédula / C.I." value={form.pacCedula} onChange={e => setForm(f => ({ ...f, pacCedula: e.target.value }))} />
+                <input className="input" placeholder="Nombre completo" value={form.pacNombre} onChange={e => setForm(f => ({ ...f, pacNombre: formatearNombre(e.target.value) }))} />
+                <input className="input" placeholder="Cédula / C.I." value={form.pacCedula} onChange={e => setForm(f => ({ ...f, pacCedula: e.target.value.toUpperCase().replace(/[^0-9A-Z-]/g, '') }))} />
               </div>
               <div className="row">
                 <input className="input" type="date" value={form.pacFechaNac} onChange={e => setForm(f => ({ ...f, pacFechaNac: e.target.value }))} />
@@ -332,8 +656,12 @@ export default function Vacunaciones() {
                 <td>{v.puntoVacunacion?.nombre || <span style={{ color: '#94a3b8' }}>—</span>}</td>
                 <td>{new Date(v.fechaAplicacion).toLocaleDateString()}</td>
                 <td>{v.usuarioAplicador?.nombre || '-'}</td>
-                <td>
-                  <button onClick={() => eliminar(v.idVacunacion)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', fontSize: 13, fontWeight: 600 }}>
+                <td style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <button onClick={() => generarCarnetPDF(v)} title="Descargar carnet de vacunación" style={{ background: 'none', border: '1px solid #0284c7', borderRadius: 6, cursor: 'pointer', color: '#0284c7', fontSize: 12, fontWeight: 600, padding: '3px 8px', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="11" x2="12" y2="17"/><polyline points="9 14 12 17 15 14"/></svg>
+                    Carnet
+                  </button>
+                  <button onClick={() => eliminar(v.idVacunacion)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', fontSize: 12, fontWeight: 600 }}>
                     Eliminar
                   </button>
                 </td>
