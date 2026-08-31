@@ -19,10 +19,11 @@ export default function Vacunaciones() {
   const [form, setForm] = useState({
     idPaciente: '', idCampaña: '', dosis: '1ra', idLote: '', idPunto: '', fecha: '',
     // Campos para registrar nuevo paciente
-    nuevoPaciente: false,
+    nuevoPaciente: true,
     pacNombre: '', pacCedula: '', pacFechaNac: '', pacSexo: 'M', pacIdGrupo: ''
   })
   const [busquedaCedula, setBusquedaCedula] = useState('')
+  const [filtroTabla, setFiltroTabla] = useState('')
   const [pacienteEncontrado, setPacienteEncontrado] = useState(null)
   const [mensaje, setMensaje] = useState(null)
 
@@ -172,7 +173,7 @@ export default function Vacunaciones() {
         setPacienteEncontrado(null)
         setBusquedaCedula('')
         setForm(f => ({
-          ...f, idPaciente: '', nuevoPaciente: false,
+          ...f, idPaciente: '', nuevoPaciente: true,
           pacNombre: '', pacCedula: '', pacFechaNac: '', pacSexo: 'M', pacIdGrupo: ''
         }))
         cargarDatos()
@@ -512,6 +513,14 @@ export default function Vacunaciones() {
     return { ...l, nombreVacuna: vac ? vac.nombre : `Vacuna ${l.idVacuna}` }
   })
 
+  const listaFiltrada = lista.filter(v => {
+    if (!filtroTabla.trim()) return true;
+    const term = filtroTabla.toLowerCase();
+    const nombre = v.paciente?.nombre?.toLowerCase() || '';
+    const cedula = v.paciente?.cedula || '';
+    return nombre.includes(term) || cedula.includes(term);
+  });
+
   return (
     <>
       {mensaje && (
@@ -529,35 +538,54 @@ export default function Vacunaciones() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
             <strong style={{ fontSize: 13, color: '#334155' }}>① Paciente</strong>
             <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, color: '#64748b', cursor: 'pointer' }}>
-              <input type="checkbox" checked={form.nuevoPaciente} onChange={e => { setForm(f => ({ ...f, nuevoPaciente: e.target.checked })); setPacienteEncontrado(null) }} />
-              Nuevo paciente
+              <input type="checkbox" checked={!form.nuevoPaciente} onChange={e => { setForm(f => ({ ...f, nuevoPaciente: !e.target.checked })); setPacienteEncontrado(null) }} />
+              Paciente registrado
             </label>
           </div>
 
           {!form.nuevoPaciente ? (
             <>
-              <div className="row">
-                <input className="input" placeholder="Buscar por C.I." value={busquedaCedula}
-                  onChange={e => setBusquedaCedula(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && buscarPaciente()} />
-                <button className="btn" onClick={buscarPaciente} style={{ maxWidth: 120 }}>Buscar</button>
-              </div>
-              {pacienteEncontrado && (
-                <div style={{ fontSize: 13, marginTop: 4, padding: '8px 10px', background: '#ecfdf5', borderRadius: 8, border: '1px solid #a7f3d0' }}>
-                  <strong>{pacienteEncontrado.nombre}</strong> — C.I.: {pacienteEncontrado.cedula} — {calcularEdad(pacienteEncontrado.fechaNacimiento)} — {pacienteEncontrado.sexo === 'M' ? 'Masculino' : 'Femenino'}
-                  {pacienteEncontrado.grupoPriorizado && <span> — Grupo: {pacienteEncontrado.grupoPriorizado.nombreGrupo}</span>}
+              {!pacienteEncontrado ? (
+                <div style={{ position: 'relative' }}>
+                  <input 
+                    className="input" 
+                    placeholder="Buscar paciente por Nombre o C.I..." 
+                    value={busquedaCedula}
+                    onChange={e => setBusquedaCedula(e.target.value)}
+                    autoComplete="off"
+                  />
+                  {busquedaCedula.trim().length > 0 && (
+                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'white', border: '1px solid #e2e8f0', borderRadius: 6, maxHeight: 200, overflowY: 'auto', zIndex: 10, boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', marginTop: 4 }}>
+                      {pacientes.filter(p => p.nombre.toLowerCase().includes(busquedaCedula.toLowerCase()) || p.cedula.includes(busquedaCedula)).slice(0, 20).map(p => (
+                        <div 
+                          key={p.idPaciente} 
+                          style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', fontSize: 13, color: '#334155' }}
+                          onClick={() => {
+                            setPacienteEncontrado(p)
+                            setForm(f => ({ ...f, idPaciente: p.idPaciente }))
+                            setBusquedaCedula('')
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f8fafc'}
+                          onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                        >
+                          <strong>{p.nombre}</strong> — C.I.: {p.cedula}
+                        </div>
+                      ))}
+                      {pacientes.filter(p => p.nombre.toLowerCase().includes(busquedaCedula.toLowerCase()) || p.cedula.includes(busquedaCedula)).length === 0 && (
+                         <div style={{ padding: '8px 12px', fontSize: 13, color: '#64748b' }}>No se encontraron coincidencias.</div>
+                      )}
+                    </div>
+                  )}
                 </div>
-              )}
-              {!pacienteEncontrado && (
-                <div style={{ marginTop: 6 }}>
-                  <select className="input" value={form.idPaciente} onChange={e => {
-                    setForm(f => ({ ...f, idPaciente: e.target.value }))
-                    const pac = pacientes.find(p => p.idPaciente === parseInt(e.target.value))
-                    if (pac) setPacienteEncontrado(pac)
-                  }}>
-                    <option value="">— Seleccionar paciente existente —</option>
-                    {pacientes.map(p => <option key={p.idPaciente} value={p.idPaciente}>{p.nombre} (C.I.: {p.cedula})</option>)}
-                  </select>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13, padding: '10px 12px', background: '#ecfdf5', borderRadius: 8, border: '1px solid #a7f3d0' }}>
+                  <div style={{ color: '#065f46' }}>
+                    <strong>{pacienteEncontrado.nombre}</strong> — C.I.: {pacienteEncontrado.cedula} — {calcularEdad(pacienteEncontrado.fechaNacimiento)} — {pacienteEncontrado.sexo === 'M' ? 'Masculino' : 'Femenino'}
+                    {pacienteEncontrado.grupoPriorizado && <span> — Grupo: {pacienteEncontrado.grupoPriorizado.nombreGrupo}</span>}
+                  </div>
+                  <button onClick={() => { setPacienteEncontrado(null); setForm(f => ({ ...f, idPaciente: '' })) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#059669', fontWeight: 600, fontSize: 12 }}>
+                    Cambiar paciente
+                  </button>
                 </div>
               )}
             </>
@@ -618,9 +646,18 @@ export default function Vacunaciones() {
       </div>
 
       <div className="card">
-        <div className="section-head">
-          <h2>Vacunaciones registradas</h2>
-          <span className="section-badge">{lista.length} registros</span>
+        <div className="section-head" style={{ marginBottom: 15, display: 'flex', flexWrap: 'wrap', gap: 15, justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <h2 style={{ margin: 0 }}>Vacunaciones registradas</h2>
+            <span className="section-badge">{listaFiltrada.length} registros</span>
+          </div>
+          <input 
+            className="input" 
+            placeholder="Buscar registro por Nombre o C.I..." 
+            value={filtroTabla}
+            onChange={e => setFiltroTabla(e.target.value)}
+            style={{ maxWidth: 350, margin: 0, padding: '8px 12px' }}
+          />
         </div>
         <table>
           <thead>
@@ -639,7 +676,7 @@ export default function Vacunaciones() {
             </tr>
           </thead>
           <tbody>
-            {lista.map((v) => (
+            {listaFiltrada.map((v) => (
               <tr key={v.idVacunacion}>
                 <td><strong>{v.paciente?.nombre || '-'}</strong></td>
                 <td className="font-mono">{v.paciente?.cedula || '-'}</td>
