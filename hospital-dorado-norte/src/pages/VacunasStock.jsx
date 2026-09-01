@@ -10,6 +10,7 @@ export default function VacunasStock() {
     stockMinimo: '', 
     fechaVencimiento: '2026-12-31' 
   })
+  const [editandoId, setEditandoId] = useState(null)
 
   useEffect(() => {
     cargarDatos()
@@ -59,6 +60,73 @@ export default function VacunasStock() {
     }
   }
 
+  const iniciarEdicion = (lote) => {
+    setEditandoId(lote.idLote)
+    setForm({
+      idVacuna: lote.idVacuna,
+      codigoLote: `LOTE-${lote.idLote}`,
+      cantidadDisponible: lote.cantidadDisponible,
+      stockMinimo: 0,
+      fechaVencimiento: lote.fechaVencimiento.split('T')[0]
+    })
+  }
+
+  const cancelarEdicion = () => {
+    setEditandoId(null)
+    setForm({ 
+      idVacuna: vacunas.length > 0 ? vacunas[0].idVacuna : '', 
+      codigoLote: '', 
+      cantidadDisponible: '', 
+      stockMinimo: '', 
+      fechaVencimiento: '2026-12-31' 
+    })
+  }
+
+  const guardarEdicion = async () => {
+    if (!form.idVacuna || !form.cantidadDisponible) return
+    try {
+      const res = await fetch(`http://localhost:5119/api/lotes/${editandoId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          idVacuna: parseInt(form.idVacuna),
+          cantidadDisponible: parseInt(form.cantidadDisponible),
+          fechaVencimiento: form.fechaVencimiento
+        })
+      })
+      if (res.ok) {
+        cancelarEdicion()
+        cargarDatos()
+      } else {
+        if (res.status !== 204) {
+          const errorData = await res.json().catch(()=>({}))
+          alert(errorData.mensaje || 'Error al editar')
+        } else {
+          cancelarEdicion()
+          cargarDatos()
+        }
+      }
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  const eliminarLote = async (id) => {
+    if (!window.confirm('¿Seguro que quieres eliminar este lote?')) return
+    try {
+      const res = await fetch(`http://localhost:5119/api/lotes/${id}`, {
+        method: 'DELETE'
+      })
+      if (res.ok || res.status === 204) {
+        cargarDatos()
+      } else {
+        alert('Error al eliminar lote')
+      }
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
   // Agrupar lotes por vacuna
   const lotesAgrupados = Object.values(lista.reduce((acc, l) => {
     const idVac = l.idVacuna;
@@ -93,7 +161,14 @@ export default function VacunasStock() {
           <input className="input" style={{ flex: '1 1 120px', margin: 0 }} type="number" value={form.stockMinimo} onChange={(e) => setForm({ ...form, stockMinimo: e.target.value })} placeholder="Stock mínimo" />
           <input className="input" style={{ flex: '1 1 150px', margin: 0 }} type="date" value={form.fechaVencimiento} onChange={(e) => setForm({ ...form, fechaVencimiento: e.target.value })} />
         </div>
-        <button className="btn" onClick={agregar} style={{ width: 'fit-content' }}>Registrar lote</button>
+        {editandoId ? (
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button className="btn" onClick={guardarEdicion} style={{ width: 'fit-content' }}>Guardar cambios</button>
+            <button className="btn" onClick={cancelarEdicion} style={{ width: 'fit-content', background: '#94a3b8' }}>Cancelar</button>
+          </div>
+        ) : (
+          <button className="btn" onClick={agregar} style={{ width: 'fit-content' }}>Registrar lote</button>
+        )}
       </div>
 
       <div className="card">
@@ -118,7 +193,7 @@ export default function VacunasStock() {
               {lotesAgrupados.map((grupo) => (
                 <React.Fragment key={`grupo-${grupo.idVacuna}`}>
                   {grupo.lotes.map((l) => (
-                    <tr key={l.idLote} style={{ borderBottom: '1px solid #f1f5f9', color: '#475569' }}>
+                    <tr key={l.idLote} style={{ borderBottom: '1px solid #f1f5f9', color: '#475569', backgroundColor: editandoId === l.idLote ? '#f0f9ff' : 'transparent' }}>
                       <td style={{ padding: '12px 8px' }}>{grupo.nombre}</td>
                       <td style={{ padding: '12px 8px', fontWeight: 500 }}>LOTE-{l.idLote}</td>
                       <td style={{ padding: '12px 8px' }}>{l.cantidadDisponible}</td>
@@ -129,8 +204,8 @@ export default function VacunasStock() {
                       <td style={{ padding: '12px 8px' }}>{new Date().toLocaleDateString()}</td>
                       <td style={{ padding: '12px 8px' }}><span style={{ color: '#059669', fontSize: 12, fontWeight: 500 }}>Registrado</span></td>
                       <td style={{ padding: '12px 8px', display: 'flex', gap: 6 }}>
-                        <button style={{ background: '#0284c7', color: 'white', border: 'none', borderRadius: 4, padding: '4px 10px', fontSize: 12, cursor: 'pointer', fontWeight: 500 }}>Editar</button>
-                        <button style={{ background: '#0284c7', color: 'white', border: 'none', borderRadius: 4, padding: '4px 10px', fontSize: 12, cursor: 'pointer', fontWeight: 500 }}>Eliminar</button>
+                        <button onClick={() => iniciarEdicion(l)} style={{ background: editandoId === l.idLote ? '#0ea5e9' : '#0284c7', color: 'white', border: 'none', borderRadius: 4, padding: '4px 10px', fontSize: 12, cursor: 'pointer', fontWeight: 500 }}>{editandoId === l.idLote ? 'Editando...' : 'Editar'}</button>
+                        <button onClick={() => eliminarLote(l.idLote)} style={{ background: '#ef4444', color: 'white', border: 'none', borderRadius: 4, padding: '4px 10px', fontSize: 12, cursor: 'pointer', fontWeight: 500 }}>Eliminar</button>
                       </td>
                     </tr>
                   ))}

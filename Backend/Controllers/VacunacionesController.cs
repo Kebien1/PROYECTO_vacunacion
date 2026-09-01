@@ -63,8 +63,24 @@ namespace Backend.Controllers
                 return BadRequest(new { mensaje = "La campaña no existe" });
 
             // Validar usuario aplicador
-            if (!_context.usuario.Any(u => u.IdUsuario == vacunacion.IdUsuarioAplicador))
+            var usuarioAplicador = _context.usuario.Include(u => u.Rol).FirstOrDefault(u => u.IdUsuario == vacunacion.IdUsuarioAplicador);
+            if (usuarioAplicador == null)
                 return BadRequest(new { mensaje = "El usuario aplicador no existe" });
+
+            if (usuarioAplicador.Rol?.Nombre != "Administrador")
+            {
+                var hoy = vacunacion.FechaAplicacion.Date;
+                var autorizado = _context.jornada
+                    .Include(j => j.Implicados)
+                    .Any(j => j.IdCampaña == vacunacion.IdCampaña 
+                           && j.Fecha.Date == hoy 
+                           && j.Implicados.Any(i => i.IdUsuario == usuarioAplicador.IdUsuario));
+                           
+                if (!autorizado)
+                {
+                    return BadRequest(new { mensaje = "No autorizado. Solo el personal implicado en la jornada de hoy para esta campaña puede registrar vacunas." });
+                }
+            }
 
             // Validar punto de vacunación (opcional)
             if (vacunacion.IdPunto != null && !_context.puntovacunacion.Any(p => p.IdPunto == vacunacion.IdPunto))

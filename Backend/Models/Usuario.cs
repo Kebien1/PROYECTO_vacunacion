@@ -13,4 +13,5 @@ public class Usuario
     public int IdRol { get; set; }
     public Rol? Rol { get; set; }
 
+    public ICollection<Jornada>? Jornadas { get; set; } = new List<Jornada>();
 }

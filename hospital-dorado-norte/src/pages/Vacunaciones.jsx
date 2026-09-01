@@ -140,6 +140,71 @@ export default function Vacunaciones() {
       return
     }
 
+    const hoyStr = new Date().toISOString().split('T')[0];
+    if (form.fecha !== hoyStr) {
+      setMensaje({ tipo: 'error', texto: 'Solo se puede registrar la vacunación con la fecha actual' });
+      return;
+    }
+
+    // --- VALIDACIONES DE NEGOCIO ---
+    const loteOrig = lotes.find(l => l.idLote === parseInt(form.idLote));
+    if (loteOrig) {
+      if (loteOrig.cantidadDisponible <= 0) {
+        setMensaje({ tipo: 'error', texto: 'El lote seleccionado no tiene stock disponible' });
+        return;
+      }
+      
+      const hoyCalc = new Date();
+      hoyCalc.setHours(0,0,0,0);
+      const venc = new Date(loteOrig.fechaVencimiento);
+      if (venc < hoyCalc) {
+        setMensaje({ tipo: 'error', texto: 'El lote seleccionado ya se encuentra vencido' });
+        return;
+      }
+
+      // Obtener el nombre de la vacuna
+      const vac = vacunas.find(v => v.idVacuna === loteOrig.idVacuna);
+      const nombreVac = vac ? vac.nombre.toUpperCase() : '';
+
+      // Calculo de edad para validar vacunas
+      let fechaNacString = form.nuevoPaciente ? form.pacFechaNac : (pacienteEncontrado?.fechaNacimiento || null);
+      if (!fechaNacString) {
+        const pac = pacientes.find(p => p.idPaciente === parseInt(idPacienteFinal));
+        if (pac) fechaNacString = pac.fechaNacimiento;
+      }
+
+      if (fechaNacString) {
+        const nac = new Date(fechaNacString);
+        let mesesEdad = (hoyCalc.getFullYear() - nac.getFullYear()) * 12 + hoyCalc.getMonth() - nac.getMonth();
+        if (hoyCalc.getDate() < nac.getDate()) mesesEdad--;
+        const anosEdad = mesesEdad / 12;
+
+        if (anosEdad > 120) {
+          setMensaje({ tipo: 'error', texto: 'Edad del paciente no válida (verifique la fecha de nacimiento)' });
+          return;
+        }
+
+        // Reglas de vacunas específicas
+        if (nombreVac === 'SR' || nombreVac.includes(' SR ') || nombreVac.endsWith(' SR') || nombreVac.startsWith('SR ')) {
+           if (anosEdad < 10 || anosEdad >= 15) { // 10 a 14 años (hasta 14.99)
+             setMensaje({ tipo: 'error', texto: 'La vacuna SR es solo para adolescentes de 10 a 14 años' });
+             return;
+           }
+        } else if (nombreVac.includes('SRP')) {
+           if (anosEdad < 1 || anosEdad >= 10) { // 1 a 9 años (hasta 9.99)
+             setMensaje({ tipo: 'error', texto: 'La vacuna SRP es solo para niños de 1 a 9 años' });
+             return;
+           }
+        } else if (nombreVac.includes('INFLUENZA')) {
+           if (mesesEdad < 6) {
+             setMensaje({ tipo: 'error', texto: 'La vacuna INFLUENZA es para mayores de 6 meses' });
+             return;
+           }
+        }
+      }
+    }
+    // --- FIN VALIDACIONES DE NEGOCIO ---
+
     try {
       const res = await fetch('http://localhost:5119/api/vacunaciones', {
         method: 'POST',
@@ -513,6 +578,55 @@ export default function Vacunaciones() {
     return { ...l, nombreVacuna: vac ? vac.nombre : `Vacuna ${l.idVacuna}` }
   })
 
+  // Preparar estado de opciones de lotes para la UI (disabled, motivo)
+  let edadAnosRender = 0;
+  let edadMesesRender = 0;
+  let pacienteTieneEdad = false;
+  
+  let fechaNacRender = form.nuevoPaciente ? form.pacFechaNac : (pacienteEncontrado?.fechaNacimiento || null);
+  if (!fechaNacRender && form.idPaciente && !form.nuevoPaciente) {
+    const pac = pacientes.find(p => p.idPaciente === parseInt(form.idPaciente));
+    if (pac) fechaNacRender = pac.fechaNacimiento;
+  }
+
+  if (fechaNacRender) {
+    const hoyCalc = new Date();
+    const nac = new Date(fechaNacRender);
+    edadMesesRender = (hoyCalc.getFullYear() - nac.getFullYear()) * 12 + hoyCalc.getMonth() - nac.getMonth();
+    if (hoyCalc.getDate() < nac.getDate()) edadMesesRender--;
+    edadAnosRender = edadMesesRender / 12;
+    pacienteTieneEdad = true;
+  }
+
+  const hoyRender = new Date();
+  hoyRender.setHours(0,0,0,0);
+
+  const lotesRender = lotesConVacuna.map(l => {
+    let disabled = false;
+    let motivo = '';
+    
+    if (l.cantidadDisponible <= 0) {
+      disabled = true;
+      motivo = ' Agotado';
+    } else {
+      const venc = new Date(l.fechaVencimiento);
+      if (venc < hoyRender) {
+        disabled = true;
+        motivo = ' Vencido';
+      } else if (pacienteTieneEdad) {
+        const nombreVac = l.nombreVacuna.toUpperCase();
+        if (nombreVac === 'SR' || nombreVac.includes(' SR ') || nombreVac.endsWith(' SR') || nombreVac.startsWith('SR ')) {
+           if (edadAnosRender < 10 || edadAnosRender >= 15) { disabled = true; motivo = ' Edad no válida'; }
+        } else if (nombreVac.includes('SRP')) {
+           if (edadAnosRender < 1 || edadAnosRender >= 10) { disabled = true; motivo = ' Edad no válida'; }
+        } else if (nombreVac.includes('INFLUENZA')) {
+           if (edadMesesRender < 6) { disabled = true; motivo = ' Edad no válida'; }
+        }
+      }
+    }
+    return { ...l, disabled, motivo };
+  });
+
   const listaFiltrada = lista.filter(v => {
     if (!filtroTabla.trim()) return true;
     const term = filtroTabla.toLowerCase();
@@ -618,9 +732,10 @@ export default function Vacunaciones() {
               {campañas.map(c => <option key={c.idCampaña} value={c.idCampaña}>{c.nombre}</option>)}
             </select>
             <select className="input" value={form.idLote} onChange={e => setForm(f => ({ ...f, idLote: e.target.value }))}>
-              {lotesConVacuna.map(l => (
-                <option key={l.idLote} value={l.idLote}>
-                  {l.nombreVacuna} — Lote #{l.idLote} (Disp: {l.cantidadDisponible})
+              <option value="">— Seleccione Lote / Vacuna —</option>
+              {lotesRender.map(l => (
+                <option key={l.idLote} value={l.idLote} disabled={l.disabled} style={{ color: l.disabled ? '#dc2626' : 'inherit', fontWeight: l.disabled ? 'bold' : 'normal' }}>
+                  {l.nombreVacuna} — Lote #{l.idLote} (Disp: {l.cantidadDisponible}) {l.motivo}
                 </option>
               ))}
             </select>
@@ -635,7 +750,14 @@ export default function Vacunaciones() {
               <option value="">— Punto de vacunación (opcional) —</option>
               {puntos.map(p => <option key={p.idPunto} value={p.idPunto}>{p.nombre}</option>)}
             </select>
-            <input className="input" type="date" value={form.fecha} onChange={e => setForm(f => ({ ...f, fecha: e.target.value }))} />
+            <input 
+              className="input" 
+              type="date" 
+              value={form.fecha} 
+              onChange={e => setForm(f => ({ ...f, fecha: e.target.value }))} 
+              min={new Date().toISOString().split('T')[0]} 
+              max={new Date().toISOString().split('T')[0]} 
+            />
           </div>
         </div>
 

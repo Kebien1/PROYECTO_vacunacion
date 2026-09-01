@@ -57,6 +57,7 @@ public class Conexion : DbContext
         modelBuilder.Entity<MovimientoStock>().HasOne(x => x.Lote).WithMany().HasForeignKey(x => x.IdLote);
         modelBuilder.Entity<Jornada>().HasOne(x => x.Campaña).WithMany().HasForeignKey(x => x.IdCampaña);
         modelBuilder.Entity<PuntoVacunacion>().HasOne(x => x.Jornada).WithMany(x => x.Puntos).HasForeignKey(x => x.IdJornada);
+        modelBuilder.Entity<Jornada>().HasMany(j => j.Implicados).WithMany(u => u.Jornadas).UsingEntity(j => j.ToTable("JornadaUsuarios"));
         modelBuilder.Entity<Vacunacion>().HasOne(x => x.Paciente).WithMany().HasForeignKey(x => x.IdPaciente);
         modelBuilder.Entity<Vacunacion>().HasOne(x => x.Campaña).WithMany(x => x.Vacunaciones).HasForeignKey(x => x.IdCampaña);
         modelBuilder.Entity<Vacunacion>().HasOne(x => x.Lote).WithMany().HasForeignKey(x => x.IdLote);

@@ -5,6 +5,7 @@ export default function Campanas() {
   const [centros, setCentros] = useState([])
   const [nueva, setNueva] = useState({ nombre: '', fechaInicio: '', fechaFin: '', idCentro: '' })
   const [guardado, setGuardado] = useState(false)
+  const [mensajeError, setMensajeError] = useState('')
 
   useEffect(() => {
     cargarDatos()
@@ -28,19 +29,23 @@ export default function Campanas() {
   }
 
   const crear = async () => {
-    if (!nueva.nombre || !nueva.fechaInicio || !nueva.fechaFin || !nueva.idCentro) return
+    setMensajeError('');
+    if (!nueva.nombre || !nueva.fechaInicio || !nueva.fechaFin || !nueva.idCentro) {
+      setMensajeError('Por favor complete todos los campos');
+      return;
+    }
     
     const inicio = new Date(nueva.fechaInicio + 'T00:00:00');
     const hoy = new Date();
     hoy.setHours(0,0,0,0);
     
     if (inicio < hoy) {
-      alert('No se pueden crear campañas con fechas anteriores al día de hoy');
+      setMensajeError('No se pueden crear campañas con fechas anteriores al día de hoy');
       return;
     }
 
     if (new Date(nueva.fechaFin + 'T00:00:00') < inicio) {
-      alert('La fecha de fin no puede ser anterior a la fecha de inicio');
+      setMensajeError('La fecha de fin no puede ser anterior a la fecha de inicio');
       return;
     }
     
@@ -60,19 +65,28 @@ export default function Campanas() {
       if (res.ok) {
         cargarDatos()
         setGuardado(true)
+        setMensajeError('')
         setTimeout(() => setGuardado(false), 2500)
         setNueva({ nombre: '', fechaInicio: '', fechaFin: '', idCentro: centros.length > 0 ? centros[0].idCentro : '' })
       } else {
         const errorData = await res.json()
-        alert(errorData.mensaje || 'Error al guardar campaña')
+        setMensajeError(errorData.mensaje || 'Error al guardar campaña')
       }
     } catch (error) {
       console.error("Error", error)
     }
   }
 
+  const hoyStr = new Date().toISOString().split('T')[0];
+
   return (
     <>
+      {mensajeError && (
+        <div className="alert login-error" style={{ marginBottom: 14 }}>
+          {mensajeError}
+          <button onClick={() => setMensajeError('')} style={{ float: 'right', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700 }}>✕</button>
+        </div>
+      )}
       <div className="card">
         <h2>Campañas programadas (RF02)</h2>
         <table>
@@ -100,8 +114,8 @@ export default function Campanas() {
           </select>
         </div>
         <div className="row">
-          <input className="input" type="date" value={nueva.fechaInicio} onChange={(e) => setNueva({ ...nueva, fechaInicio: e.target.value })} placeholder="Fecha Inicio" />
-          <input className="input" type="date" value={nueva.fechaFin} onChange={(e) => setNueva({ ...nueva, fechaFin: e.target.value })} placeholder="Fecha Fin" />
+          <input className="input" type="date" value={nueva.fechaInicio} onChange={(e) => setNueva({ ...nueva, fechaInicio: e.target.value })} placeholder="Fecha Inicio" min={hoyStr} />
+          <input className="input" type="date" value={nueva.fechaFin} onChange={(e) => setNueva({ ...nueva, fechaFin: e.target.value })} placeholder="Fecha Fin" min={nueva.fechaInicio || hoyStr} />
         </div>
         <button className="btn" onClick={crear}>Guardar campaña</button>
         {guardado && <span style={{ color: '#065f46', marginLeft: 10, fontSize: 13 }}>✓ Campaña registrada</span>}

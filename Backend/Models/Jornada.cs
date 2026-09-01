@@ -10,4 +10,6 @@ public class Jornada
     public Campaña? Campaña { get; set; }
 
     public ICollection<PuntoVacunacion>? Puntos { get; set; }
+    
+    public ICollection<Usuario>? Implicados { get; set; } = new List<Usuario>();
 }
